@@ -1,5 +1,7 @@
 pragma circom 2.0.0;
 
+include "node_modules/circomlib/circuits/poseidon.circom";
+
 template BidderVerification() {
 
     // 🔐 PRIVATE
@@ -14,19 +16,16 @@ template BidderVerification() {
     signal output valid;
     signal output nullifier;
 
-    // ⚠️ TEMP HASH
-    signal computedHash;
+    // 🔐 Poseidon hash
+    component hash = Poseidon(1);
+    hash.inputs[0] <== bidderSecret;
 
-    // Compute hash
-    computedHash <== bidderSecret * bidderSecret;
+    // constraint check
+    hash.out === expectedHash;
 
-    // Constraint check
-    computedHash === expectedHash;
-
-    // Set valid = 1 (if constraint passes)
     valid <== 1;
 
-    // 🔥 NULLIFIER (temporary logic)
+    // 🔥 NULLIFIER (temporary still simple)
     nullifier <== bidderSecret + auctionId + bidNonce;
 }
 
