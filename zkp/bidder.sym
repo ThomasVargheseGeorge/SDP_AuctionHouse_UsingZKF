@@ -1,0 +1,5 @@
+1,1,0,main.valid
+2,2,0,main.bidderSecret
+3,3,0,main.expectedHash
+4,4,0,main.computedHash
+5,-1,0,main.diff
