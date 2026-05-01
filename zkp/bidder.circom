@@ -2,29 +2,32 @@ pragma circom 2.0.0;
 
 template BidderVerification() {
 
-    // Private input
+    // 🔐 PRIVATE
     signal input bidderSecret;
 
-    // Public input
+    // 🌍 PUBLIC
+    signal input auctionId;
+    signal input bidNonce;
     signal input expectedHash;
 
-    // Output
+    // 🔎 OUTPUT
     signal output valid;
+    signal output nullifier;
 
+    // ⚠️ TEMP HASH
     signal computedHash;
-    signal diff;
 
-    // Simulated hash
+    // Compute hash
     computedHash <== bidderSecret * bidderSecret;
 
-    // Enforce equality: diff = computedHash - expectedHash
-    diff <== computedHash - expectedHash;
+    // Constraint check
+    computedHash === expectedHash;
 
-    // Constraint: diff must be 0
-    diff === 0;
-
-    // If constraint passes → valid = 1
+    // Set valid = 1 (if constraint passes)
     valid <== 1;
+
+    // 🔥 NULLIFIER (temporary logic)
+    nullifier <== bidderSecret + auctionId + bidNonce;
 }
 
 component main = BidderVerification();

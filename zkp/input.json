@@ -1,4 +1,6 @@
 {
-  "bidderSecret": 10,
-  "expectedHash": 100
+  "bidderSecret": 5,
+  "auctionId": 1,
+  "bidNonce": 2,
+  "expectedHash": 25
 }

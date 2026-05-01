@@ -30,10 +30,10 @@ public class BidService {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // 🔥 NEW: Store used nullifiers
+    // 🔥 Store used nullifiers (prevents proof reuse)
     private final Set<String> usedNullifiers = new HashSet<>();
 
-    // 🔐 SHA-256 Hash (legacy)
+    // 🔐 SHA-256 Hash (legacy - not used in ZKP flow)
     private String hashBidder(String bidderId) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -53,7 +53,7 @@ public class BidService {
         }
     }
 
-    // 🚀 MAIN ZKP METHOD
+    // 🚀 MAIN ZKP METHOD (UPDATED FOR REAL NULLIFIER)
     public String placeBidWithProof(Map<String, Object> proof, List<Object> publicSignals, Long auctionId, Double bidAmount) {
 
         // ✅ Input validation
@@ -61,26 +61,30 @@ public class BidService {
             return "Invalid request data";
         }
 
+        if (publicSignals.size() < 2) {
+            return "Invalid public signals (missing nullifier)";
+        }
+
         if (bidAmount <= 0) {
             return "Bid amount must be greater than 0";
         }
 
-        // 🔐 STEP 1: Extract nullifier
-        String nullifier = publicSignals.get(0).toString();
+        // 🔥 Extract nullifier (index 1 because [valid, nullifier])
+        String nullifier = publicSignals.get(1).toString();
 
-        // 🚨 STEP 2: Check reuse
+        // 🔥 Prevent proof reuse
         if (usedNullifiers.contains(nullifier)) {
-            return "Duplicate bid detected (nullifier reused)";
+            return "Duplicate bid detected (same proof reused)";
         }
 
-        // 🔐 STEP 3: Verify ZKP
+        // 🔐 Verify ZKP
         boolean isValid = verifyProofExternally(proof, publicSignals);
 
         if (!isValid) {
             return "Invalid ZKP proof";
         }
 
-        // 🔎 STEP 4: Auction check
+        // 🔎 Auction validation
         Optional<Auction> auctionOpt = auctionRepository.findById(auctionId);
 
         if (auctionOpt.isEmpty()) {
@@ -97,11 +101,11 @@ public class BidService {
             return "Bid must be higher than current highest bid";
         }
 
-        // 🔄 STEP 5: Update auction
+        // 🔄 Update auction
         auction.setCurrentHighestBid(bidAmount);
         auctionRepository.save(auction);
 
-        // 🧾 STEP 6: Store bid
+        // 🧾 Store bid (no identity)
         Bid bid = new Bid();
         bid.setAuctionId(auctionId);
         bid.setBidAmount(bidAmount);
@@ -109,7 +113,7 @@ public class BidService {
 
         bidRepository.save(bid);
 
-        // 🔐 STEP 7: Save nullifier AFTER success
+        // 🔥 Save nullifier AFTER successful bid
         usedNullifiers.add(nullifier);
 
         return "Bid placed via ZKP ✔";
@@ -120,7 +124,7 @@ public class BidService {
         mapper.writeValue(new File(path), data);
     }
 
-    // 🔐 REAL ZKP verification
+    // 🔐 ZKP verification using snarkjs
     private boolean verifyProofExternally(Map<String, Object> proof, List<Object> publicSignals) {
         try {
 

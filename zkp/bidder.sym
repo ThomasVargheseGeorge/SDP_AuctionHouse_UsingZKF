@@ -1,5 +1,7 @@
 1,1,0,main.valid
-2,2,0,main.bidderSecret
-3,3,0,main.expectedHash
-4,4,0,main.computedHash
-5,-1,0,main.diff
+2,2,0,main.nullifier
+3,3,0,main.bidderSecret
+4,4,0,main.auctionId
+5,5,0,main.bidNonce
+6,6,0,main.expectedHash
+7,-1,0,main.computedHash
