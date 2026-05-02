@@ -53,35 +53,41 @@ public class BidService {
         }
     }
 
-    // 🚀 MAIN ZKP METHOD (UPDATED FOR REAL NULLIFIER)
-    public String placeBidWithProof(Map<String, Object> proof, List<Object> publicSignals, Long auctionId, Double bidAmount) {
+    // 🚀 MAIN ZKP METHOD (FINAL VERSION WITH SECURE NULLIFIER)
+    public String placeBidWithProof(
+            Map<String, Object> proof,
+            List<Object> publicSignals,
+            Long auctionId,
+            Double bidAmount
+    ) {
 
         // ✅ Input validation
         if (proof == null || publicSignals == null || auctionId == null || bidAmount == null) {
             return "Invalid request data";
         }
 
-        if (publicSignals.size() < 2) {
-            return "Invalid public signals (missing nullifier)";
+        // 🔥 MUST be 3 now: [valid, oldNullifier, secureNullifier]
+        if (publicSignals.size() < 3) {
+            return "Invalid public signals (missing secure nullifier)";
         }
 
         if (bidAmount <= 0) {
             return "Bid amount must be greater than 0";
         }
 
-        // 🔥 Extract nullifier (index 1 because [valid, nullifier])
-        String nullifier = publicSignals.get(1).toString();
+        // 🔥 USE SECURE NULLIFIER (Poseidon-based)
+        String nullifier = publicSignals.get(2).toString();
 
-        // 🔥 Prevent proof reuse
+        // 🔒 Prevent proof reuse
         if (usedNullifiers.contains(nullifier)) {
-            return "Duplicate bid detected (same proof reused)";
+            return "❌ Double bidding detected (nullifier already used)";
         }
 
         // 🔐 Verify ZKP
         boolean isValid = verifyProofExternally(proof, publicSignals);
 
         if (!isValid) {
-            return "Invalid ZKP proof";
+            return "❌ Invalid ZKP proof";
         }
 
         // 🔎 Auction validation
@@ -105,7 +111,7 @@ public class BidService {
         auction.setCurrentHighestBid(bidAmount);
         auctionRepository.save(auction);
 
-        // 🧾 Store bid (no identity)
+        // 🧾 Store bid (anonymous)
         Bid bid = new Bid();
         bid.setAuctionId(auctionId);
         bid.setBidAmount(bidAmount);
@@ -113,10 +119,10 @@ public class BidService {
 
         bidRepository.save(bid);
 
-        // 🔥 Save nullifier AFTER successful bid
+        // 🔥 Mark nullifier AFTER successful bid
         usedNullifiers.add(nullifier);
 
-        return "Bid placed via ZKP ✔";
+        return "✅ Bid placed via ZKP ✔";
     }
 
     // 🔐 Write JSON to file
