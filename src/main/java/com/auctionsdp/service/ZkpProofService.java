@@ -3,70 +3,194 @@ package com.auctionsdp.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Map;
 
+/**
+ * ZkpProofService
+ *
+ * Complete rewrite — Stage 1.
+ *
+ * OLD approach (broken):
+ * - Shelled out to cmd.exe to run snarkjs CLI commands directly
+ * - Depended on compiled circuit files being in exact paths
+ * - Windows-only, fragile, hard to debug
+ *
+ * NEW approach:
+ * - Sends circuit input to Node.js server at localhost:3000/full-prove via HTTP
+ * - Node.js server handles witness generation, proving, and verification
+ * - Returns proof + publicSignals + timing metrics
+ * - Works regardless of OS or file paths
+ * - Timing metrics come back automatically for benchmarking
+ */
 @Service
 public class ZkpProofService {
 
-    private static final String ZKP_DIR = "zkp";
+    // Node.js ZKP server endpoint
+    private static final String ZKP_SERVER_URL = "http://localhost:3000/full-prove";
 
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    // =============================
+    // GENERATE PROOF
+    //
+    // Sends circuit input to Node.js server
+    // Returns proof, publicSignals, and timing metrics
+    //
+    // Expected response from server:
+    // {
+    //   "success": true,
+    //   "valid": true,
+    //   "proof": { ... },
+    //   "publicSignals": ["1", "nullifierValue"],
+    //   "metrics": {
+    //     "proofGenerationTimeMs": 1200,
+    //     "verificationTimeMs": 45,
+    //     "proofSizeBytes": 876,
+    //     "totalTimeMs": 1245
+    //   }
+    // }
+    // =============================
     public Map<String, Object> generateProof(Map<String, Object> input) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
+            // Serialize input to JSON
+            String inputJson = mapper.writeValueAsString(input);
 
-            // 1. Write input.json
-            File inputFile = new File(ZKP_DIR + "/input.json");
-            mapper.writerWithDefaultPrettyPrinter().writeValue(inputFile, input);
+            // Open HTTP connection to Node.js server
+            URL url = new URL(ZKP_SERVER_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setDoOutput(true);
 
-            // 2. Generate witness
-            runCommand("node bidder_js/generate_witness.js bidder_js/bidder.wasm input.json witness.wtns");
+            // Set timeout — proof generation can take a few seconds
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(60000);
 
-            // 3. Generate proof
-            runCommand(
-                    "snarkjs groth16 prove bidder_final.zkey witness.wtns proof.json public.json"
+            // Send input JSON
+            try (OutputStream os = conn.getOutputStream()) {
+                byte[] bytes = inputJson.getBytes("utf-8");
+                os.write(bytes, 0, bytes.length);
+            }
+
+            // Read response
+            int responseCode = conn.getResponseCode();
+
+            BufferedReader reader;
+            if (responseCode == 200) {
+                reader = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "utf-8")
+                );
+            } else {
+                reader = new BufferedReader(
+                        new InputStreamReader(conn.getErrorStream(), "utf-8")
+                );
+            }
+
+            StringBuilder responseBuilder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                responseBuilder.append(line);
+            }
+            reader.close();
+
+            String responseJson = responseBuilder.toString();
+            System.out.println("[ZKP Server Response] " + responseJson);
+
+            // Parse response
+            Map<String, Object> response = mapper.readValue(responseJson, Map.class);
+
+            // Check success
+            if (responseCode != 200) {
+                throw new RuntimeException(
+                    "ZKP server returned error " + responseCode + ": " + responseJson
+                );
+            }
+
+            Boolean success = (Boolean) response.get("success");
+            if (success == null || !success) {
+                String error = (String) response.get("error");
+                throw new RuntimeException("ZKP proof generation failed: " + error);
+            }
+
+            Boolean valid = (Boolean) response.get("valid");
+            if (valid == null || !valid) {
+                throw new RuntimeException("ZKP proof generated but verification failed");
+            }
+
+            // Log metrics for benchmarking
+            Map<String, Object> metrics = (Map<String, Object>) response.get("metrics");
+            if (metrics != null) {
+                System.out.println("[ZKP Metrics] " +
+                    "Generation: " + metrics.get("proofGenerationTimeMs") + "ms | " +
+                    "Verification: " + metrics.get("verificationTimeMs") + "ms | " +
+                    "Size: " + metrics.get("proofSizeBytes") + " bytes"
+                );
+            }
+
+            return response;
+
+        } catch (Exception e) {
+            throw new RuntimeException(
+                "ZKP proof generation failed — is Node.js server running at localhost:3000? Error: "
+                + e.getMessage(), e
             );
+        }
+    }
 
-            // 4. Verify proof
-            runCommand(
-                    "snarkjs groth16 verify verification_key.json public.json proof.json"
-            );
-
-            // 5. Read outputs
-            Map proof = mapper.readValue(new File(ZKP_DIR + "/proof.json"), Map.class);
-            Object publicSignals = mapper.readValue(new File(ZKP_DIR + "/public.json"), Object.class);
-
-            return Map.of(
+    // =============================
+    // VERIFY PROOF ONLY
+    // Used by BidService to verify a manually submitted proof
+    // Calls /verify-proof endpoint on Node.js server
+    // =============================
+    public boolean verifyProof(Map<String, Object> proof, java.util.List<Object> publicSignals) {
+        try {
+            Map<String, Object> requestBody = Map.of(
                     "proof", proof,
                     "publicSignals", publicSignals
             );
 
+            String inputJson = mapper.writeValueAsString(requestBody);
+
+            URL url = new URL("http://localhost:3000/verify-proof");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(30000);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                byte[] bytes = inputJson.getBytes("utf-8");
+                os.write(bytes, 0, bytes.length);
+            }
+
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), "utf-8")
+            );
+
+            StringBuilder responseBuilder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                responseBuilder.append(line);
+            }
+            reader.close();
+
+            Map<String, Object> response = mapper.readValue(
+                    responseBuilder.toString(), Map.class
+            );
+
+            Boolean valid = (Boolean) response.get("valid");
+            return valid != null && valid;
+
         } catch (Exception e) {
-            throw new RuntimeException("ZKP proof generation failed", e);
-        }
-    }
-
-    private void runCommand(String command) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder("cmd.exe", "/c", command);
-
-        pb.directory(new File(ZKP_DIR));
-        pb.redirectErrorStream(true);
-
-        Process process = pb.start();
-
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream())
-        );
-
-        String line;
-        while ((line = reader.readLine()) != null) {
-            System.out.println("[ZKP] " + line);
-        }
-
-        int exitCode = process.waitFor();
-
-        if (exitCode != 0) {
-            throw new RuntimeException("Command failed: " + command);
+            System.err.println("Proof verification error: " + e.getMessage());
+            return false;
         }
     }
 }

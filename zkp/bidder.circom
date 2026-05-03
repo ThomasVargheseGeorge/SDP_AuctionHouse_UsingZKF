@@ -5,55 +5,54 @@ include "./merkleProof.circom";
 
 template BidderVerification() {
 
-    // 🔐 PRIVATE
+    // =============================
+    // PRIVATE INPUTS
+    // =============================
     signal input bidderSecret;
     signal input pathElements[10];
     signal input pathIndices[10];
 
-    // 🌍 PUBLIC
+    // =============================
+    // PUBLIC INPUTS
+    // =============================
     signal input auctionId;
     signal input bidNonce;
     signal input expectedHash;
     signal input merkleRoot;
 
-    // 🔎 OUTPUT
+    // =============================
+    // OUTPUTS
+    // =============================
     signal output valid;
-    signal output nullifier;
-
-    // 🆕 NEW OUTPUT (secure nullifier)
     signal output nullifierPoseidon;
 
-    // 🔐 Poseidon hash (identity check)
+    // STEP 1: Verify bidder identity
+    // Prove bidderSecret hashes to expectedHash
     component hash = Poseidon(1);
     hash.inputs[0] <== bidderSecret;
-
-    // constraint check
     hash.out === expectedHash;
 
-    // ✅ 🆕 MERKLE MEMBERSHIP (ADDED HERE — DO NOT MOVE)
+    // STEP 2: Verify merkle membership
+    // Prove this bidder is in the registered bidders tree
     component merkle = MerkleProof(10);
-
     merkle.leaf <== expectedHash;
-
     for (var i = 0; i < 10; i++) {
         merkle.pathElements[i] <== pathElements[i];
         merkle.pathIndices[i] <== pathIndices[i];
     }
-
     merkle.root === merkleRoot;
 
+    // STEP 3: Mark proof as valid
     valid <== 1;
 
-    // 🔥 OLD NULLIFIER (kept as-is)
-    nullifier <== bidderSecret + auctionId + bidNonce;
-
-    // 🆕 NEW NULLIFIER (secure)
+    // STEP 4: Secure nullifier
+    // Poseidon(bidderSecret, auctionId, bidNonce)
+    // Insecure addition nullifier removed
     component nullifierHash = Poseidon(3);
     nullifierHash.inputs[0] <== bidderSecret;
     nullifierHash.inputs[1] <== auctionId;
     nullifierHash.inputs[2] <== bidNonce;
-
     nullifierPoseidon <== nullifierHash.out;
 }
 
-component main = BidderVerification();
+component main {public [auctionId, bidNonce, expectedHash, merkleRoot]} = BidderVerification();
