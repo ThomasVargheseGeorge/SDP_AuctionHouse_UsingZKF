@@ -13,9 +13,9 @@ app.use(express.json());
 // All ZKP files live in the zkp/ folder
 // =============================
 const ZKP_DIR       = path.join(__dirname, "zkp");
-const WASM_PATH     = path.join(ZKP_DIR, "bidder_js", "bidder.wasm");
-const ZKEY_PATH     = path.join(ZKP_DIR, "circuit_final.zkey");
-const VKEY_PATH     = path.join(ZKP_DIR, "verification_key.json");
+const WASM_PATH     = path.join(ZKP_DIR, "bidder_v2_js", "bidder_v2.wasm");
+const ZKEY_PATH     = path.join(ZKP_DIR, "circuit_v2_final.zkey");
+const VKEY_PATH     = path.join(ZKP_DIR, "verification_key_v2.json");
 
 // =============================
 // HEALTH CHECK
@@ -159,6 +159,7 @@ app.post("/full-prove", async (req, res) => {
     console.log("Full prove and verify...");
 
     const input = req.body;
+    console.log("INPUT RECEIVED:", JSON.stringify(input, null, 2));
 
     try {
         // STEP 1: Generate proof

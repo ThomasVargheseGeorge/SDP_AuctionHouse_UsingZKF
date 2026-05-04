@@ -4,24 +4,25 @@ import com.auctionsdp.model.Bid;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * BidRepository
  *
- * Stage 1 additions:
- * - existsByNullifier        — checks if a nullifier has already been used
- * - findByAuctionId          — gets all bids for a specific auction
- * - findByAuctionIdAndRevealed — gets revealed or unrevealed bids for an auction
+ * Stage 3 addition:
+ * - findByNullifier — finds a specific bid during reveal phase
  */
 public interface BidRepository extends JpaRepository<Bid, Long> {
 
-    // Prevents double bidding — called before saving any new bid
+    // Prevents double bidding
     boolean existsByNullifier(String nullifier);
 
-    // Get all bids for a specific auction
+    // Find specific bid by nullifier — used in reveal phase
+    Optional<Bid> findByNullifier(String nullifier);
+
+    // Get all bids for an auction
     List<Bid> findByAuctionId(Long auctionId);
 
-    // Get only revealed or only unrevealed bids for an auction
-    // Used during reveal phase to find who has revealed so far
+    // Get revealed or unrevealed bids for an auction
     List<Bid> findByAuctionIdAndRevealed(Long auctionId, boolean revealed);
 }

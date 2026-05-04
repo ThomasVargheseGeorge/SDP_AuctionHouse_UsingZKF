@@ -5,6 +5,7 @@ import com.auctionsdp.model.Bid;
 import com.auctionsdp.repository.BidRepository;
 import com.auctionsdp.service.AuctionService;
 import com.auctionsdp.service.BidService;
+import com.auctionsdp.service.RevealService;
 import com.auctionsdp.service.ZkpAuctionService;
 import com.auctionsdp.service.ZkpProofService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,36 +15,16 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
-/**
- * HelloController
- *
- * REST API for the auction system.
- *
- * Stage 1 changes:
- * - Bid endpoint now expects bidCommitment instead of plain bidAmount
- *   (bidAmount is no longer accepted in plaintext — it must be hidden)
- * - publicSignals now expected to contain nullifierPoseidon only
- *   (old insecure nullifier has been removed from circuit)
- * - Added /verify endpoint for standalone proof verification
- */
 @RestController
 @RequestMapping("/")
 public class HelloController {
 
-    @Autowired
-    private BidRepository bidRepository;
-
-    @Autowired
-    private BidService bidService;
-
-    @Autowired
-    private AuctionService auctionService;
-
-    @Autowired
-    private ZkpAuctionService zkpAuctionService;
-
-    @Autowired
-    private ZkpProofService zkpProofService;
+    @Autowired private BidRepository bidRepository;
+    @Autowired private BidService bidService;
+    @Autowired private AuctionService auctionService;
+    @Autowired private ZkpAuctionService zkpAuctionService;
+    @Autowired private ZkpProofService zkpProofService;
+    @Autowired private RevealService revealService;
 
     // =============================
     // HEALTH CHECK
@@ -55,7 +36,6 @@ public class HelloController {
 
     // =============================
     // GET ALL BIDS
-    // NOTE: bid amounts are stored as commitments — not plaintext
     // =============================
     @GetMapping("/bids")
     public List<Bid> getAllBids() {
@@ -63,37 +43,137 @@ public class HelloController {
     }
 
     // =============================
-    // PLACE BID — manual proof submission
+    // GET BID COUNT
+    // Shows competition without revealing amounts
+    // =============================
+    @GetMapping("/bid-count/{auctionId}")
+    public Map<String, Object> getBidCount(@PathVariable Long auctionId) {
+        int count = bidService.getBidCount(auctionId);
+        return Map.of(
+                "auctionId", auctionId,
+                "bidCount", count,
+                "message", count + " sealed bids submitted — amounts hidden until reveal phase"
+        );
+    }
+
+    // =============================
+    // STAGE 1 AUTO BID — original circuit (baseline)
+    // =============================
+    @PostMapping("/auto-bid")
+    public Map<String, Object> autoBid(@RequestBody Map<String, Object> request) {
+        String userId        = request.get("userId").toString();
+        BigInteger secret    = new BigInteger(request.get("secret").toString());
+        BigInteger auctionId = new BigInteger(request.get("auctionId").toString());
+        BigInteger bidNonce  = new BigInteger(request.get("bidNonce").toString());
+
+        Map<String, Object> input = zkpAuctionService.generateProofInput(
+                userId, secret, auctionId, bidNonce
+        );
+        return zkpProofService.generateProof(input);
+    }
+
+    // =============================
+    // STAGE 2 AUTO BID — extended combined circuit
+    // =============================
+    @PostMapping("/auto-bid-extended")
+    public Map<String, Object> autoBidExtended(@RequestBody Map<String, Object> request) {
+        String userId           = request.get("userId").toString();
+        BigInteger secret       = new BigInteger(request.get("secret").toString());
+        BigInteger auctionId    = new BigInteger(request.get("auctionId").toString());
+        BigInteger bidNonce     = new BigInteger(request.get("bidNonce").toString());
+        BigInteger bidAmount    = new BigInteger(request.get("bidAmount").toString());
+        BigInteger reservePrice = new BigInteger(request.get("reservePrice").toString());
+
+        Map<String, Object> input = zkpAuctionService.generateExtendedProofInput(
+                userId, secret, auctionId, bidNonce, bidAmount, reservePrice
+        );
+
+        Map<String, Object> proofData = zkpProofService.generateProof(input);
+
+        String bidCommitment = input.get("bidCommitment").toString();
+        List<Object> publicSignals = (List<Object>) proofData.get("publicSignals");
+        Map<String, Object> proof = (Map<String, Object>) proofData.get("proof");
+
+        String result = bidService.placeBidWithProof(
+                proof, publicSignals,
+                Long.parseLong(auctionId.toString()),
+                bidCommitment
+        );
+
+        proofData.put("bidResult", result);
+        proofData.put("bidCommitment", bidCommitment);
+        return proofData;
+    }
+
+    // =============================
+    // STAGE 3 — CLOSE AUCTION
+    // Ends commit phase, starts reveal phase
+    // POST /auction/1/close
+    // =============================
+    @PostMapping("/auction/{auctionId}/close")
+    public Map<String, Object> closeAuction(@PathVariable Long auctionId) {
+        return revealService.closeAuction(auctionId);
+    }
+
+    // =============================
+    // STAGE 3 — REVEAL BID
+    // Bidder reveals their actual amount
+    // Server verifies Poseidon(bidAmount, secret) === stored commitment
     //
     // Body:
     // {
-    //   "proof": { ... },
-    //   "publicSignals": ["valid", "nullifierPoseidon"],
-    //   "auctionId": 1,
-    //   "bidCommitment": "poseidon(bidAmount, bidderSecret)"  ← no plain amount
+    //   "nullifier": "...",
+    //   "bidAmount": "5",
+    //   "bidderSecret": "12345678901234567890"
     // }
     // =============================
-    @PostMapping("/bid")
-    public String placeBid(@RequestBody Map<String, Object> request) {
-        Map<String, Object> proof = (Map<String, Object>) request.get("proof");
-        List<Object> publicSignals = (List<Object>) request.get("publicSignals");
+    @PostMapping("/reveal")
+    public Map<String, Object> revealBid(@RequestBody Map<String, Object> request) {
+        String nullifier        = request.get("nullifier").toString();
+        BigInteger bidAmount    = new BigInteger(request.get("bidAmount").toString());
+        BigInteger bidderSecret = new BigInteger(request.get("bidderSecret").toString());
 
-        if (proof == null || publicSignals == null) {
-            throw new RuntimeException("Missing proof or publicSignals");
-        }
+        return revealService.revealBid(nullifier, bidAmount, bidderSecret);
+    }
 
-        Long auctionId = Long.parseLong(request.get("auctionId").toString());
+    // =============================
+    // STAGE 3 — RESOLVE AUCTION
+    // Finds highest revealed bid, declares winner
+    // POST /auction/1/resolve
+    // =============================
+    @PostMapping("/auction/{auctionId}/resolve")
+    public Map<String, Object> resolveAuction(@PathVariable Long auctionId) {
+        return revealService.resolveAuction(auctionId);
+    }
 
-        // Stage 1: bidCommitment replaces plain bidAmount
-        // bidAmount is hidden — only the commitment is stored
-        String bidCommitment = request.get("bidCommitment").toString();
+    // =============================
+    // STAGE 3 — AUCTION STATUS
+    // Shows current phase, bid count, winner if resolved
+    // GET /auction/1/status
+    // =============================
+    @GetMapping("/auction/{auctionId}/status")
+    public Map<String, Object> getAuctionStatus(@PathVariable Long auctionId) {
+        return revealService.getAuctionStatus(auctionId);
+    }
 
-        return bidService.placeBidWithProof(proof, publicSignals, auctionId, bidCommitment);
+    // =============================
+    // CREATE AUCTION
+    // =============================
+    @PostMapping("/auction")
+    public Auction createAuction(@RequestBody Auction auction) {
+        return auctionService.createAuction(auction);
+    }
+
+    // =============================
+    // GET ALL AUCTIONS
+    // =============================
+    @GetMapping("/auction")
+    public List<Auction> getAllAuctions() {
+        return auctionService.getAllAuctions();
     }
 
     // =============================
     // GENERATE ZKP INPUT
-    // Returns the structured input needed for proof generation
     // =============================
     @PostMapping("/zkp-input")
     public Map<String, Object> generateZkpInput(@RequestBody Map<String, Object> request) {
@@ -111,46 +191,20 @@ public class HelloController {
     }
 
     // =============================
-    // AUTO BID — full automated flow
-    // 1. Generates ZKP input from user parameters
-    // 2. Sends to Node.js server to generate proof
-    // 3. Returns proof + publicSignals + timing metrics
+    // PLACE BID — manual proof submission
     // =============================
-    @PostMapping("/auto-bid")
-    public Map<String, Object> autoBid(@RequestBody Map<String, Object> request) {
-        String userId     = request.get("userId").toString();
-        BigInteger secret    = new BigInteger(request.get("secret").toString());
-        BigInteger auctionId = new BigInteger(request.get("auctionId").toString());
-        BigInteger bidNonce  = new BigInteger(request.get("bidNonce").toString());
+    @PostMapping("/bid")
+    public String placeBid(@RequestBody Map<String, Object> request) {
+        Map<String, Object> proof = (Map<String, Object>) request.get("proof");
+        List<Object> publicSignals = (List<Object>) request.get("publicSignals");
 
-        // Step 1: Generate ZKP input
-        Map<String, Object> input = zkpAuctionService.generateProofInput(
-                userId,
-                secret,
-                auctionId,
-                bidNonce
-        );
+        if (proof == null || publicSignals == null) {
+            throw new RuntimeException("Missing proof or publicSignals");
+        }
 
-        // Step 2: Generate proof via Node.js ZKP server
-        // Returns proof, publicSignals, and timing metrics
-        Map<String, Object> proofData = zkpProofService.generateProof(input);
+        Long auctionId = Long.parseLong(request.get("auctionId").toString());
+        String bidCommitment = request.get("bidCommitment").toString();
 
-        return proofData;
-    }
-
-    // =============================
-    // CREATE AUCTION
-    // =============================
-    @PostMapping("/auction")
-    public Auction createAuction(@RequestBody Auction auction) {
-        return auctionService.createAuction(auction);
-    }
-
-    // =============================
-    // GET ALL AUCTIONS
-    // =============================
-    @GetMapping("/auction")
-    public List<Auction> getAllAuctions() {
-        return auctionService.getAllAuctions();
+        return bidService.placeBidWithProof(proof, publicSignals, auctionId, bidCommitment);
     }
 }
