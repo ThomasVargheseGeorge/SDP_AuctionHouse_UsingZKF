@@ -4,28 +4,12 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * MerkleTreeService - Fixed to match circuit exactly.
- *
- * The circuit computes root by:
- * - Starting from leaf
- * - At each level i:
- *   if pathIndices[i] == 0: Poseidon(current, pathElement[i])
- *   if pathIndices[i] == 1: Poseidon(pathElement[i], current)
- *
- * Java must compute root THE SAME WAY.
- * buildRoot now uses computeRootFromPath internally
- * so both are guaranteed to match.
- */
+
 public class MerkleTreeService {
 
     private final int depth = 10;
 
-    // =============================
-    // BUILD ROOT
-    // Gets path for leaf at index 0, then computes root
-    // using the exact same logic as the circuit
-    // =============================
+
     public BigInteger buildRoot(List<BigInteger> leaves) {
         if (leaves == null || leaves.isEmpty()) {
             return BigInteger.ZERO;
@@ -37,11 +21,7 @@ public class MerkleTreeService {
         return computeRootFromPath(leaves.get(0), pathElements, pathIndices);
     }
 
-    // =============================
-    // COMPUTE ROOT FROM PATH
-    // Mirrors the circuit's merkleProof.circom EXACTLY
-    // This is the single source of truth for root computation
-    // =============================
+
     public BigInteger computeRootFromPath(
             BigInteger leaf,
             List<BigInteger> pathElements,
@@ -63,11 +43,7 @@ public class MerkleTreeService {
         return current;
     }
 
-    // =============================
-    // GET PATH ELEMENTS
-    // Returns sibling hash at each level for given leaf index
-    // Always returns exactly depth elements
-    // =============================
+    
     public List<BigInteger> getPathElements(List<BigInteger> leaves, int index) {
         List<BigInteger> path = new ArrayList<>();
         List<BigInteger> level = padToPowerOfTwo(new ArrayList<>(leaves));
@@ -103,10 +79,6 @@ public class MerkleTreeService {
         return path;
     }
 
-    // =============================
-    // GET PATH INDICES
-    // Returns direction at each level: 0 = left, 1 = right
-    // =============================
     public List<Integer> getPathIndices(int index) {
         List<Integer> indices = new ArrayList<>();
         int currentIndex = index;
@@ -117,10 +89,7 @@ public class MerkleTreeService {
         return indices;
     }
 
-    // =============================
-    // BUILD ROOT FOR SPECIFIC LEAF
-    // Used when we need the root from any leaf's perspective
-    // =============================
+   
     public BigInteger buildRootForLeaf(List<BigInteger> leaves, int index) {
         List<BigInteger> pathElements = getPathElements(leaves, index);
         List<Integer> pathIndices = getPathIndices(index);

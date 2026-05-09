@@ -2,9 +2,11 @@ package com.auctionsdp.controller;
 
 import com.auctionsdp.model.Auction;
 import com.auctionsdp.model.Bid;
+import com.auctionsdp.model.NFT;
 import com.auctionsdp.repository.BidRepository;
 import com.auctionsdp.service.AuctionService;
 import com.auctionsdp.service.BidService;
+import com.auctionsdp.service.NFTService;
 import com.auctionsdp.service.RevealService;
 import com.auctionsdp.service.ZkpAuctionService;
 import com.auctionsdp.service.ZkpProofService;
@@ -25,27 +27,19 @@ public class HelloController {
     @Autowired private ZkpAuctionService zkpAuctionService;
     @Autowired private ZkpProofService zkpProofService;
     @Autowired private RevealService revealService;
+    @Autowired private NFTService nftService;
 
-    // =============================
-    // HEALTH CHECK
-    // =============================
     @GetMapping("/")
     public String home() {
         return "Auction Backend Running";
     }
 
-    // =============================
-    // GET ALL BIDS
-    // =============================
     @GetMapping("/bids")
     public List<Bid> getAllBids() {
         return bidRepository.findAll();
     }
 
-    // =============================
-    // GET BID COUNT
-    // Shows competition without revealing amounts
-    // =============================
+    
     @GetMapping("/bid-count/{auctionId}")
     public Map<String, Object> getBidCount(@PathVariable Long auctionId) {
         int count = bidService.getBidCount(auctionId);
@@ -56,9 +50,7 @@ public class HelloController {
         );
     }
 
-    // =============================
-    // STAGE 1 AUTO BID — original circuit (baseline)
-    // =============================
+    
     @PostMapping("/auto-bid")
     public Map<String, Object> autoBid(@RequestBody Map<String, Object> request) {
         String userId        = request.get("userId").toString();
@@ -72,9 +64,7 @@ public class HelloController {
         return zkpProofService.generateProof(input);
     }
 
-    // =============================
-    // STAGE 2 AUTO BID — extended combined circuit
-    // =============================
+    
     @PostMapping("/auto-bid-extended")
     public Map<String, Object> autoBidExtended(@RequestBody Map<String, Object> request) {
         String userId           = request.get("userId").toString();
@@ -105,76 +95,79 @@ public class HelloController {
         return proofData;
     }
 
-    // =============================
-    // STAGE 3 — CLOSE AUCTION
-    // Ends commit phase, starts reveal phase
-    // POST /auction/1/close
-    // =============================
+    
     @PostMapping("/auction/{auctionId}/close")
     public Map<String, Object> closeAuction(@PathVariable Long auctionId) {
         return revealService.closeAuction(auctionId);
     }
 
-    // =============================
-    // STAGE 3 — REVEAL BID
-    // Bidder reveals their actual amount
-    // Server verifies Poseidon(bidAmount, secret) === stored commitment
-    //
-    // Body:
-    // {
-    //   "nullifier": "...",
-    //   "bidAmount": "5",
-    //   "bidderSecret": "12345678901234567890"
-    // }
-    // =============================
+    
     @PostMapping("/reveal")
     public Map<String, Object> revealBid(@RequestBody Map<String, Object> request) {
         String nullifier        = request.get("nullifier").toString();
         BigInteger bidAmount    = new BigInteger(request.get("bidAmount").toString());
         BigInteger bidderSecret = new BigInteger(request.get("bidderSecret").toString());
-
         return revealService.revealBid(nullifier, bidAmount, bidderSecret);
     }
 
-    // =============================
-    // STAGE 3 — RESOLVE AUCTION
-    // Finds highest revealed bid, declares winner
-    // POST /auction/1/resolve
-    // =============================
+    
     @PostMapping("/auction/{auctionId}/resolve")
     public Map<String, Object> resolveAuction(@PathVariable Long auctionId) {
         return revealService.resolveAuction(auctionId);
     }
 
-    // =============================
-    // STAGE 3 — AUCTION STATUS
-    // Shows current phase, bid count, winner if resolved
-    // GET /auction/1/status
-    // =============================
+    
     @GetMapping("/auction/{auctionId}/status")
     public Map<String, Object> getAuctionStatus(@PathVariable Long auctionId) {
         return revealService.getAuctionStatus(auctionId);
     }
 
-    // =============================
-    // CREATE AUCTION
-    // =============================
+    
     @PostMapping("/auction")
     public Auction createAuction(@RequestBody Auction auction) {
         return auctionService.createAuction(auction);
     }
-
-    // =============================
-    // GET ALL AUCTIONS
-    // =============================
     @GetMapping("/auction")
     public List<Auction> getAllAuctions() {
         return auctionService.getAllAuctions();
     }
 
-    // =============================
-    // GENERATE ZKP INPUT
-    // =============================
+    @PostMapping("/nft/mint")
+    public NFT mintNFT(@RequestBody Map<String, Object> request) {
+        String tokenId         = request.get("tokenId").toString();
+        String name            = request.get("name").toString();
+        String description     = request.get("description").toString();
+        String ownerNullifier  = request.get("ownerNullifier").toString();
+        return nftService.mintNFT(tokenId, name, description, ownerNullifier);
+    }
+
+    
+    @PostMapping("/nft/list")
+    public Map<String, Object> listNFT(@RequestBody Map<String, Object> request) {
+        String tokenId  = request.get("tokenId").toString();
+        Long auctionId  = Long.parseLong(request.get("auctionId").toString());
+        return nftService.listNFTForAuction(tokenId, auctionId);
+    }
+
+    
+    @GetMapping("/nft/{tokenId}")
+    public NFT getNFT(@PathVariable String tokenId) {
+        return nftService.getNFT(tokenId);
+    }
+
+    
+    @GetMapping("/nft")
+    public List<NFT> getAllNFTs() {
+        return nftService.getAllNFTs();
+    }
+
+    
+    @GetMapping("/auction/{auctionId}/summary")
+    public Map<String, Object> getAuctionSummary(@PathVariable Long auctionId) {
+        return nftService.getAuctionNFTSummary(auctionId);
+    }
+
+    
     @PostMapping("/zkp-input")
     public Map<String, Object> generateZkpInput(@RequestBody Map<String, Object> request) {
         String userId    = request.get("userId").toString();
@@ -190,9 +183,6 @@ public class HelloController {
         );
     }
 
-    // =============================
-    // PLACE BID — manual proof submission
-    // =============================
     @PostMapping("/bid")
     public String placeBid(@RequestBody Map<String, Object> request) {
         Map<String, Object> proof = (Map<String, Object>) request.get("proof");

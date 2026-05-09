@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-05-04T22:35:35.240Z",
+  "circuits": {
+    "baseline": {
+      "label": "Stage 1 Baseline",
+      "proofGenerationAvg": 723,
+      "proofGenerationMin": 529,
+      "proofGenerationMax": 1166,
+      "verificationAvg": 19,
+      "verificationMin": 16,
+      "verificationMax": 21,
+      "proofSizeBytes": 723,
+      "proofSizeKB": "0.71",
+      "constraints": 6251,
+      "propertiesProved": 2,
+      "scalability": [
+        {
+          "n": 10,
+          "totalMs": 4900,
+          "perBidderMs": 490,
+          "throughput": 2.04
+        },
+        {
+          "n": 50,
+          "totalMs": 24013,
+          "perBidderMs": 480.3,
+          "throughput": 2.08
+        },
+        {
+          "n": 100,
+          "totalMs": 49297,
+          "perBidderMs": 493,
+          "throughput": 2.03
+        }
+      ]
+    },
+    "naive": {
+      "label": "Naive Two-Proof",
+      "proofGenerationAvg": 1446,
+      "proofGenerationMin": 1058,
+      "proofGenerationMax": 2332,
+      "verificationAvg": 38,
+      "verificationMin": 32,
+      "verificationMax": 42,
+      "proofSizeBytes": 1446,
+      "proofSizeKB": "1.41",
+      "scalability": [
+        {
+          "n": 10,
+          "totalMs": 9800,
+          "perBidderMs": 980,
+          "throughput": 1.02
+        },
+        {
+          "n": 50,
+          "totalMs": 48026,
+          "perBidderMs": 960.6,
+          "throughput": 1.04
+        },
+        {
+          "n": 100,
+          "totalMs": 98594,
+          "perBidderMs": 986,
+          "throughput": 1.01
+        }
+      ],
+      "constraints": 12502,
+      "propertiesProved": 4,
+      "note": "Simulated — baseline x2"
+    },
+    "combined": {
+      "label": "Stage 2 Combined",
+      "proofGenerationAvg": 645,
+      "proofGenerationMin": 467,
+      "proofGenerationMax": 1009,
+      "verificationAvg": 15,
+      "verificationMin": 12,
+      "verificationMax": 20,
+      "proofSizeBytes": 720,
+      "proofSizeKB": "0.70",
+      "constraints": 6836,
+      "propertiesProved": 4,
+      "scalability": [
+        {
+          "n": 10,
+          "totalMs": 6530,
+          "perBidderMs": 653,
+          "throughput": 1.53
+        },
+        {
+          "n": 50,
+          "totalMs": 25108,
+          "perBidderMs": 502.2,
+          "throughput": 1.99
+        },
+        {
+          "n": 100,
+          "totalMs": 48907,
+          "perBidderMs": 489.1,
+          "throughput": 2.04
+        }
+      ]
+    }
+  },
+  "summary": {
+    "improvementOverNaive": 55.4,
+    "constraintReduction": 45.3
+  }
+}

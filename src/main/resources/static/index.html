@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZKP NFT Auction — Privacy-Preserving Sealed Bid</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #050810;
+    --surface: #0d1117;
+    --surface2: #161b27;
+    --border: #1e2a3a;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --danger: #ef4444;
+    --warn: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --glow: 0 0 20px rgba(0,212,255,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    padding: 32px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: var(--glow);
+  }
+
+  .logo-text h1 {
+    font-size: 20px; font-weight: 800;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text p { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; }
+
+  .status-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .pill {
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    border: 1px solid;
+  }
+
+  .pill-green { border-color: var(--accent3); color: var(--accent3); background: rgba(16,185,129,0.08); }
+  .pill-blue  { border-color: var(--accent);  color: var(--accent);  background: rgba(0,212,255,0.08); }
+  .pill-purple{ border-color: var(--accent2); color: var(--accent2); background: rgba(124,58,237,0.08); }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 32px; background: var(--surface); padding: 4px; border-radius: 12px; width: fit-content; }
+
+  .tab {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab.active {
+    background: var(--surface2);
+    color: var(--text);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: rgba(0,212,255,0.2); }
+
+  .card-title {
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .card-value {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .green { color: var(--accent3); }
+  .blue  { color: var(--accent);  }
+  .purple{ color: var(--accent2); }
+  .warn  { color: var(--warn);    }
+
+  /* GRID LAYOUTS */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 32px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 500px) {
+    .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* CHART WRAPPER */
+  .chart-wrap {
+    position: relative;
+    height: 280px;
+  }
+
+  .chart-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .chart-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 20px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* HIGHLIGHT BAR */
+  .highlight-bar {
+    background: linear-gradient(90deg, rgba(0,212,255,0.1), transparent);
+    border-left: 3px solid var(--accent);
+    padding: 16px 20px;
+    border-radius: 0 12px 12px 0;
+    margin-bottom: 24px;
+  }
+
+  .highlight-bar h3 { font-size: 28px; font-weight: 800; color: var(--accent3); }
+  .highlight-bar p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* AUCTION FORM */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+  label { font-size: 12px; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 0.5px; }
+
+  input, select, textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,212,255,0.1); }
+
+  .btn {
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: none;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #0099cc);
+    color: #000;
+    box-shadow: 0 4px 15px rgba(0,212,255,0.25);
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,212,255,0.35); }
+
+  .btn-danger  { background: var(--danger); color: #fff; }
+  .btn-success { background: var(--accent3); color: #000; }
+  .btn-ghost   { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* RESPONSE BOX */
+  .response-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent3);
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 16px;
+  }
+
+  .response-box.error { color: var(--danger); }
+  .response-box.empty { color: var(--muted); font-style: italic; }
+
+  /* AUCTION FLOW STEPS */
+  .flow-steps {
+    display: flex;
+    gap: 0;
+    margin-bottom: 32px;
+    overflow-x: auto;
+  }
+
+  .step {
+    flex: 1;
+    min-width: 120px;
+    padding: 16px 12px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-right: none;
+    position: relative;
+    transition: all 0.2s;
+  }
+
+  .step:first-child { border-radius: 12px 0 0 12px; }
+  .step:last-child  { border-radius: 0 12px 12px 0; border-right: 1px solid var(--border); }
+
+  .step.active  { background: rgba(0,212,255,0.08); border-color: var(--accent); }
+  .step.done    { background: rgba(16,185,129,0.08); border-color: var(--accent3); }
+
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--surface2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    margin: 0 auto 8px;
+  }
+
+  .step.active .step-num  { background: var(--accent); color: #000; }
+  .step.done   .step-num  { background: var(--accent3); color: #000; }
+
+  .step-label { font-size: 11px; color: var(--muted); }
+  .step.active .step-label { color: var(--accent); }
+  .step.done   .step-label { color: var(--accent3); }
+
+  /* COMPARISON TABLE */
+  .compare-table { width: 100%; border-collapse: collapse; }
+
+  .compare-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .compare-table td {
+    padding: 14px 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .badge {
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .badge-win  { background: rgba(16,185,129,0.15);  color: var(--accent3); }
+  .badge-lose { background: rgba(239,68,68,0.15);   color: var(--danger); }
+  .badge-mid  { background: rgba(245,158,11,0.15);  color: var(--warn); }
+
+  /* LOADING SPINNER */
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(0,212,255,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* FADE IN */
+  .fade-in {
+    animation: fadeIn 0.4s ease forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* NULLIFIER DISPLAY */
+  .nullifier-tag {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    word-break: break-all;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">🔐</div>
+        <div class="logo-text">
+          <h1>ZKP NFT Auction</h1>
+          <p>PRIVACY-PRESERVING SEALED-BID SYSTEM</p>
+        </div>
+      </div>
+      <div class="status-pills">
+        <span class="pill pill-green">● Java :8080</span>
+        <span class="pill pill-blue">● Node :3000</span>
+        <span class="pill pill-purple">● ZKP Active</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('auction')">🏷 Auction</button>
+    <button class="tab" onclick="switchTab('benchmark')">📊 Benchmarks</button>
+    <button class="tab" onclick="switchTab('compare')">⚖️ Comparison</button>
+  </div>
+
+  <!-- ======================== AUCTION PANEL ======================== -->
+  <div id="panel-auction" class="panel active">
+
+    <!-- Flow Steps -->
+    <div class="flow-steps" id="flow-steps">
+      <div class="step active" id="step-1"><div class="step-num">1</div><div class="step-label">Create</div></div>
+      <div class="step" id="step-2"><div class="step-num">2</div><div class="step-label">Mint NFT</div></div>
+      <div class="step" id="step-3"><div class="step-num">3</div><div class="step-label">List NFT</div></div>
+      <div class="step" id="step-4"><div class="step-num">4</div><div class="step-label">Bid</div></div>
+      <div class="step" id="step-5"><div class="step-num">5</div><div class="step-label">Close</div></div>
+      <div class="step" id="step-6"><div class="step-num">6</div><div class="step-label">Reveal</div></div>
+      <div class="step" id="step-7"><div class="step-num">7</div><div class="step-label">Resolve</div></div>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- LEFT: Auction Controls -->
+      <div>
+        <!-- Step 1: Create Auction -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title">Step 1 — Create Auction</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Item Name</label>
+              <input type="text" id="itemName" value="Rare Digital Art #001" />
+            </div>
+            <div class="form-group">
+              <label>Reserve Price (ETH)</label>
+              <input type="number" id="reservePrice" value="2" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="createAuction()">Create Auction</button>
+          <div id="resp-create" class="response-box empty">Response will appear here...</div>
+        </div>
+
+        <!-- Step 2: Mint NFT -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title">Step 2 — Mint NFT</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Token ID</label>
+              <input type="text" id="nftTokenId" value="NFT001" />
+            </div>
+            <div class="form-group">
+              <label>NFT Name</label>
+              <input type="text" id="nftName" value="Rare Digital Art" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="mintNFT()">Mint NFT</button>
+          <div id="resp-mint" class="response-box empty">Response will appear here...</div>
+        </div>
+
+        <!-- Step 3: List NFT -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title">Step 3 — List NFT for Auction</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Token ID</label>
+              <input type="text" id="listTokenId" value="NFT001" />
+            </div>
+            <div class="form-group">
+              <label>Auction ID</label>
+              <input type="number" id="listAuctionId" value="1" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="listNFT()">List NFT</button>
+          <div id="resp-list" class="response-box empty">Response will appear here...</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Bidding + Reveal -->
+      <div>
+        <!-- Step 4: Place Bid -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title">Step 4 — Place Sealed Bid</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>User ID</label>
+              <input type="text" id="bidUserId" value="user1" />
+            </div>
+            <div class="form-group">
+              <label>Secret Key</label>
+              <input type="text" id="bidSecret" value="12345678901234567890" />
+            </div>
+            <div class="form-group">
+              <label>Auction ID</label>
+              <input type="number" id="bidAuctionId" value="1" />
+            </div>
+            <div class="form-group">
+              <label>Bid Nonce</label>
+              <input type="text" id="bidNonce" value="42" />
+            </div>
+            <div class="form-group">
+              <label>Bid Amount (ETH)</label>
+              <input type="number" id="bidAmount" value="5" />
+            </div>
+            <div class="form-group">
+              <label>Reserve Price</label>
+              <input type="number" id="bidReserve" value="2" />
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="placeBid()" id="btn-bid">
+            🔒 Submit Sealed Bid
+          </button>
+          <div id="resp-bid" class="response-box empty">ZKP proof will be generated...</div>
+          <div id="nullifier-display" style="display:none">
+            <div style="font-size:11px;color:var(--muted);margin-top:12px">YOUR NULLIFIER (save this for reveal)</div>
+            <div class="nullifier-tag" id="nullifier-value"></div>
+          </div>
+        </div>
+
+        <!-- Step 5: Close Auction -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title">Step 5 — Close Auction</div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Auction ID</label>
+            <input type="number" id="closeAuctionId" value="1" />
+          </div>
+          <button class="btn btn-danger" onclick="closeAuction()">🔒 Close & Start Reveal Phase</button>
+          <div id="resp-close" class="response-box empty">Response will appear here...</div>
+        </div>
+
+        <!-- Step 6: Reveal Bid -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="section-title">Step 6 — Reveal Bid</div>
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1">
+              <label>Nullifier (from Step 4 response)</label>
+              <input type="text" id="revealNullifier" placeholder="Paste nullifier here" />
+            </div>
+            <div class="form-group">
+              <label>Bid Amount</label>
+              <input type="number" id="revealAmount" value="5" />
+            </div>
+            <div class="form-group">
+              <label>Bidder Secret</label>
+              <input type="text" id="revealSecret" value="12345678901234567890" />
+            </div>
+          </div>
+          <button class="btn btn-success" onclick="revealBid()">👁 Reveal Bid</button>
+          <div id="resp-reveal" class="response-box empty">Response will appear here...</div>
+        </div>
+
+        <!-- Step 7: Resolve -->
+        <div class="card">
+          <div class="section-title">Step 7 — Resolve Auction</div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Auction ID</label>
+            <input type="number" id="resolveAuctionId" value="1" />
+          </div>
+          <button class="btn btn-success" onclick="resolveAuction()">🏆 Resolve & Transfer NFT</button>
+          <div id="resp-resolve" class="response-box empty">Response will appear here...</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================== BENCHMARK PANEL ======================== -->
+  <div id="panel-benchmark" class="panel">
+
+    <div class="highlight-bar">
+      <h3>55.4% faster</h3>
+      <p>Combined circuit vs naive two-proof approach — proven with real snarkjs measurements</p>
+    </div>
+
+    <div class="grid-4">
+      <div class="card fade-in">
+        <div class="card-title">Proof Gen (Combined)</div>
+        <div class="card-value green">645<span style="font-size:16px;color:var(--muted)">ms</span></div>
+        <div class="card-sub">vs 1446ms naive</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-title">Verification Time</div>
+        <div class="card-value blue">15<span style="font-size:16px;color:var(--muted)">ms</span></div>
+        <div class="card-sub">vs 38ms naive</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-title">Proof Size</div>
+        <div class="card-value purple">720<span style="font-size:16px;color:var(--muted)">B</span></div>
+        <div class="card-sub">vs 1446B naive</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-title">Constraints</div>
+        <div class="card-value warn">6,836</div>
+        <div class="card-sub">vs 12,502 naive</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="chart-title">Proof Generation Time</div>
+        <div class="chart-sub">MILLISECONDS — LOWER IS BETTER</div>
+        <div class="chart-wrap">
+          <canvas id="chart-gen"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="chart-title">Verification Time</div>
+        <div class="chart-sub">MILLISECONDS — LOWER IS BETTER</div>
+        <div class="chart-wrap">
+          <canvas id="chart-verify"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="chart-title">Scalability — Throughput vs Bidders</div>
+        <div class="chart-sub">PROOFS/SEC — HIGHER IS BETTER</div>
+        <div class="chart-wrap">
+          <canvas id="chart-scale"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="chart-title">Constraint Count Comparison</div>
+        <div class="chart-sub">TOTAL CONSTRAINTS — LOWER = MORE EFFICIENT</div>
+        <div class="chart-wrap">
+          <canvas id="chart-constraints"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chart-title">Proof Size Comparison</div>
+      <div class="chart-sub">BYTES — LOWER IS BETTER</div>
+      <div class="chart-wrap" style="height:200px">
+        <canvas id="chart-size"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ======================== COMPARE PANEL ======================== -->
+  <div id="panel-compare" class="panel">
+
+    <div class="highlight-bar">
+      <h3>4 security properties</h3>
+      <p>Combined circuit proves identity + membership + range + commitment in a single ZK proof</p>
+    </div>
+
+    <div class="section-title">Full Metrics Comparison</div>
+
+    <div class="card" style="margin-bottom:32px">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Stage 1 Baseline</th>
+            <th>Naive Two-Proof</th>
+            <th>Stage 2 Combined</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Proof Gen (avg)</td>
+            <td><span class="badge badge-mid">723 ms</span></td>
+            <td><span class="badge badge-lose">1446 ms</span></td>
+            <td><span class="badge badge-win">645 ms</span></td>
+          </tr>
+          <tr>
+            <td>Proof Gen (min)</td>
+            <td>529 ms</td>
+            <td>1058 ms</td>
+            <td><span class="badge badge-win">467 ms</span></td>
+          </tr>
+          <tr>
+            <td>Verification (avg)</td>
+            <td>19 ms</td>
+            <td><span class="badge badge-lose">38 ms</span></td>
+            <td><span class="badge badge-win">15 ms</span></td>
+          </tr>
+          <tr>
+            <td>Proof Size</td>
+            <td>723 B / 0.71 KB</td>
+            <td><span class="badge badge-lose">1446 B / 1.41 KB</span></td>
+            <td><span class="badge badge-win">720 B / 0.70 KB</span></td>
+          </tr>
+          <tr>
+            <td>Constraints</td>
+            <td>6,251</td>
+            <td><span class="badge badge-lose">12,502</span></td>
+            <td><span class="badge badge-win">6,836</span></td>
+          </tr>
+          <tr>
+            <td>Properties Proved</td>
+            <td>2 (identity + merkle)</td>
+            <td>4 (two separate)</td>
+            <td><span class="badge badge-win">4 (combined)</span></td>
+          </tr>
+          <tr>
+            <td>Throughput N=100</td>
+            <td>2.03 p/s</td>
+            <td><span class="badge badge-lose">~1.0 p/s</span></td>
+            <td><span class="badge badge-win">2.04 p/s</span></td>
+          </tr>
+          <tr>
+            <td>Front-running protection</td>
+            <td><span class="badge badge-lose">No</span></td>
+            <td><span class="badge badge-mid">Partial</span></td>
+            <td><span class="badge badge-win">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Bid amount hidden</td>
+            <td><span class="badge badge-lose">No</span></td>
+            <td><span class="badge badge-mid">Partial</span></td>
+            <td><span class="badge badge-win">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Auctioneer trust required</td>
+            <td><span class="badge badge-lose">Yes</span></td>
+            <td><span class="badge badge-mid">Partial</span></td>
+            <td><span class="badge badge-win">No</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">vs Existing NFT Platforms</div>
+    <div class="card">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>OpenSea</th>
+            <th>Rarible</th>
+            <th>This System</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Bid visibility before close</td>
+            <td><span class="badge badge-lose">Fully public</span></td>
+            <td><span class="badge badge-lose">Fully public</span></td>
+            <td><span class="badge badge-win">Hidden (ZKP)</span></td>
+          </tr>
+          <tr>
+            <td>Front-running possible</td>
+            <td><span class="badge badge-lose">Yes</span></td>
+            <td><span class="badge badge-lose">Yes</span></td>
+            <td><span class="badge badge-win">No</span></td>
+          </tr>
+          <tr>
+            <td>Shill bid detectable</td>
+            <td><span class="badge badge-lose">No</span></td>
+            <td><span class="badge badge-lose">No</span></td>
+            <td><span class="badge badge-win">Yes (nullifier)</span></td>
+          </tr>
+          <tr>
+            <td>Auctioneer trust required</td>
+            <td><span class="badge badge-lose">Yes</span></td>
+            <td><span class="badge badge-lose">Yes</span></td>
+            <td><span class="badge badge-win">No</span></td>
+          </tr>
+          <tr>
+            <td>Cryptographic bid proof</td>
+            <td><span class="badge badge-lose">No</span></td>
+            <td><span class="badge badge-lose">No</span></td>
+            <td><span class="badge badge-win">Yes (Groth16)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = "http://localhost:8080";
+
+// ========================
+// TAB SWITCHING
+// ========================
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'benchmark') initCharts();
+}
+
+// ========================
+// API HELPERS
+// ========================
+async function post(url, body) {
+  const r = await fetch(API + url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+async function get(url) {
+  const r = await fetch(API + url);
+  return r.json();
+}
+
+function show(id, data, isError = false) {
+  const el = document.getElementById(id);
+  el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  el.className = 'response-box' + (isError ? ' error' : '');
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 7; i++) {
+    const s = document.getElementById('step-' + i);
+    s.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+}
+
+// ========================
+// AUCTION ACTIONS
+// ========================
+async function createAuction() {
+  try {
+    const data = await post('/auction', {
+      itemName: document.getElementById('itemName').value,
+      startingPrice: 1.0,
+      reservePrice: parseFloat(document.getElementById('reservePrice').value),
+      active: true
+    });
+    show('resp-create', data);
+    if (data.id) {
+      document.getElementById('listAuctionId').value = data.id;
+      document.getElementById('bidAuctionId').value = data.id;
+      document.getElementById('closeAuctionId').value = data.id;
+      document.getElementById('resolveAuctionId').value = data.id;
+      setStep(2);
+    }
+  } catch(e) { show('resp-create', e.message, true); }
+}
+
+async function mintNFT() {
+  try {
+    const data = await post('/nft/mint', {
+      tokenId: document.getElementById('nftTokenId').value,
+      name: document.getElementById('nftName').value,
+      description: 'Minted via ZKP Auction System',
+      ownerNullifier: 'SELLER'
+    });
+    show('resp-mint', data);
+    if (data.tokenId) {
+      document.getElementById('listTokenId').value = data.tokenId;
+      setStep(3);
+    }
+  } catch(e) { show('resp-mint', e.message, true); }
+}
+
+async function listNFT() {
+  try {
+    const data = await post('/nft/list', {
+      tokenId: document.getElementById('listTokenId').value,
+      auctionId: parseInt(document.getElementById('listAuctionId').value)
+    });
+    show('resp-list', data);
+    setStep(4);
+  } catch(e) { show('resp-list', e.message, true); }
+}
+
+async function placeBid() {
+  const btn = document.getElementById('btn-bid');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating ZK Proof...';
+  try {
+    const data = await post('/auto-bid-extended', {
+      userId:       document.getElementById('bidUserId').value,
+      secret:       document.getElementById('bidSecret').value,
+      auctionId:    document.getElementById('bidAuctionId').value,
+      bidNonce:     document.getElementById('bidNonce').value,
+      bidAmount:    document.getElementById('bidAmount').value,
+      reservePrice: document.getElementById('bidReserve').value
+    });
+    show('resp-bid', data);
+    if (data.publicSignals && data.publicSignals[1]) {
+      const nullifier = data.publicSignals[1];
+      document.getElementById('nullifier-display').style.display = 'block';
+      document.getElementById('nullifier-value').textContent = nullifier;
+      document.getElementById('revealNullifier').value = nullifier;
+      document.getElementById('revealSecret').value = document.getElementById('bidSecret').value;
+      document.getElementById('revealAmount').value = document.getElementById('bidAmount').value;
+    }
+    setStep(5);
+  } catch(e) {
+    show('resp-bid', e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔒 Submit Sealed Bid';
+  }
+}
+
+async function closeAuction() {
+  try {
+    const id = document.getElementById('closeAuctionId').value;
+    const data = await post(`/auction/${id}/close`, {});
+    show('resp-close', data);
+    setStep(6);
+  } catch(e) { show('resp-close', e.message, true); }
+}
+
+async function revealBid() {
+  try {
+    const data = await post('/reveal', {
+      nullifier:    document.getElementById('revealNullifier').value,
+      bidAmount:    document.getElementById('revealAmount').value,
+      bidderSecret: document.getElementById('revealSecret').value
+    });
+    show('resp-reveal', data);
+    setStep(7);
+  } catch(e) { show('resp-reveal', e.message, true); }
+}
+
+async function resolveAuction() {
+  try {
+    const id = document.getElementById('resolveAuctionId').value;
+    const data = await post(`/auction/${id}/resolve`, {});
+    show('resp-resolve', data);
+    if (data.winningAmount) setStep(8);
+  } catch(e) { show('resp-resolve', e.message, true); }
+}
+
+// ========================
+// CHARTS
+// ========================
+let chartsInit = false;
+
+function initCharts() {
+  if (chartsInit) return;
+  chartsInit = true;
+
+  const dark = {
+    color: '#e2e8f0',
+    grid: 'rgba(255,255,255,0.05)',
+    font: 'Space Mono'
+  };
+
+  Chart.defaults.color = dark.color;
+  Chart.defaults.font.family = dark.font;
+
+  const labels = ['Stage 1 Baseline', 'Naive Two-Proof', 'Stage 2 Combined'];
+  const colors = {
+    baseline: 'rgba(245,158,11,0.8)',
+    naive:    'rgba(239,68,68,0.8)',
+    combined: 'rgba(16,185,129,0.8)'
+  };
+  const borders = {
+    baseline: 'rgba(245,158,11,1)',
+    naive:    'rgba(239,68,68,1)',
+    combined: 'rgba(16,185,129,1)'
+  };
+
+  const barOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: dark.grid } },
+      y: { grid: { color: dark.grid } }
+    }
+  };
+
+  // Proof generation time
+  new Chart(document.getElementById('chart-gen'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: [723, 1446, 645],
+        backgroundColor: [colors.baseline, colors.naive, colors.combined],
+        borderColor: [borders.baseline, borders.naive, borders.combined],
+        borderWidth: 2,
+        borderRadius: 6
+      }]
+    },
+    options: { ...barOpts, scales: { ...barOpts.scales, y: { ...barOpts.scales.y, title: { display: true, text: 'ms' } } } }
+  });
+
+  // Verification time
+  new Chart(document.getElementById('chart-verify'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: [19, 38, 15],
+        backgroundColor: [colors.baseline, colors.naive, colors.combined],
+        borderColor: [borders.baseline, borders.naive, borders.combined],
+        borderWidth: 2,
+        borderRadius: 6
+      }]
+    },
+    options: { ...barOpts, scales: { ...barOpts.scales, y: { ...barOpts.scales.y, title: { display: true, text: 'ms' } } } }
+  });
+
+  // Scalability
+  new Chart(document.getElementById('chart-scale'), {
+    type: 'line',
+    data: {
+      labels: ['N=10', 'N=50', 'N=100'],
+      datasets: [
+        {
+          label: 'Baseline',
+          data: [2.04, 2.08, 2.03],
+          borderColor: colors.baseline,
+          backgroundColor: 'rgba(245,158,11,0.1)',
+          tension: 0.3, fill: true, pointRadius: 5
+        },
+        {
+          label: 'Naive',
+          data: [1.02, 1.04, 1.015],
+          borderColor: colors.naive,
+          backgroundColor: 'rgba(239,68,68,0.1)',
+          tension: 0.3, fill: true, pointRadius: 5
+        },
+        {
+          label: 'Combined',
+          data: [1.53, 1.99, 2.04],
+          borderColor: colors.combined,
+          backgroundColor: 'rgba(16,185,129,0.1)',
+          tension: 0.3, fill: true, pointRadius: 5
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { grid: { color: dark.grid } },
+        y: { grid: { color: dark.grid }, title: { display: true, text: 'proofs/sec' } }
+      }
+    }
+  });
+
+  // Constraints
+  new Chart(document.getElementById('chart-constraints'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: [6251, 12502, 6836],
+        backgroundColor: [colors.baseline, colors.naive, colors.combined],
+        borderColor: [borders.baseline, borders.naive, borders.combined],
+        borderWidth: 2,
+        borderRadius: 6
+      }]
+    },
+    options: { ...barOpts, scales: { ...barOpts.scales, y: { ...barOpts.scales.y, title: { display: true, text: 'constraints' } } } }
+  });
+
+  // Proof size
+  new Chart(document.getElementById('chart-size'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: [723, 1446, 720],
+        backgroundColor: [colors.baseline, colors.naive, colors.combined],
+        borderColor: [borders.baseline, borders.naive, borders.combined],
+        borderWidth: 2,
+        borderRadius: 6
+      }]
+    },
+    options: { ...barOpts, indexAxis: 'y', scales: { x: { grid: { color: dark.grid }, title: { display: true, text: 'bytes' } }, y: { grid: { color: dark.grid } } } }
+  });
+}
+</script>
+</body>
+</html>

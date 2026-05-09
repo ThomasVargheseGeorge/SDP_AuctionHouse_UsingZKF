@@ -2,16 +2,7 @@ package com.auctionsdp.model;
 
 import jakarta.persistence.*;
 
-/**
- * Bid
- *
- * Stage 1 changes:
- * - bidAmount (Double) removed — amount is now hidden until reveal phase
- * - bidCommitment added — stores Poseidon(bidAmount, bidderSecret)
- * - nullifier added — prevents double bidding
- * - revealed added — tracks whether bidder has revealed their amount yet
- * - revealedAmount added — populated only after reveal phase
- */
+
 @Entity
 public class Bid {
 
@@ -21,26 +12,15 @@ public class Bid {
 
     private Long auctionId;
 
-    // Hidden bid — Poseidon(bidAmount, bidderSecret)
-    // Plain amount is never stored here
+    
     private String bidCommitment;
 
-    // Secure Poseidon nullifier — prevents the same proof being used twice
     @Column(unique = true)
     private String nullifier;
 
-    // Has the bidder revealed their amount yet?
     private boolean revealed = false;
-
-    // Populated during reveal phase — null until then
     private Double revealedAmount;
-
-    // Bidder identity is always anonymous
     private String bidderId = "ZKP_VERIFIED";
-
-    // =============================
-    // GETTERS & SETTERS
-    // =============================
 
     public Long getId() {
         return id;

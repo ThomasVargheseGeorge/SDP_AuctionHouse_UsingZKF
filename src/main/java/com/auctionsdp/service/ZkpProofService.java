@@ -10,57 +10,20 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Map;
 
-/**
- * ZkpProofService
- *
- * Complete rewrite — Stage 1.
- *
- * OLD approach (broken):
- * - Shelled out to cmd.exe to run snarkjs CLI commands directly
- * - Depended on compiled circuit files being in exact paths
- * - Windows-only, fragile, hard to debug
- *
- * NEW approach:
- * - Sends circuit input to Node.js server at localhost:3000/full-prove via HTTP
- * - Node.js server handles witness generation, proving, and verification
- * - Returns proof + publicSignals + timing metrics
- * - Works regardless of OS or file paths
- * - Timing metrics come back automatically for benchmarking
- */
+
 @Service
 public class ZkpProofService {
 
-    // Node.js ZKP server endpoint
     private static final String ZKP_SERVER_URL = "http://localhost:3000/full-prove";
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // =============================
-    // GENERATE PROOF
-    //
-    // Sends circuit input to Node.js server
-    // Returns proof, publicSignals, and timing metrics
-    //
-    // Expected response from server:
-    // {
-    //   "success": true,
-    //   "valid": true,
-    //   "proof": { ... },
-    //   "publicSignals": ["1", "nullifierValue"],
-    //   "metrics": {
-    //     "proofGenerationTimeMs": 1200,
-    //     "verificationTimeMs": 45,
-    //     "proofSizeBytes": 876,
-    //     "totalTimeMs": 1245
-    //   }
-    // }
-    // =============================
     public Map<String, Object> generateProof(Map<String, Object> input) {
         try {
-            // Serialize input to JSON
+            
             String inputJson = mapper.writeValueAsString(input);
 
-            // Open HTTP connection to Node.js server
+           
             URL url = new URL(ZKP_SERVER_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
@@ -68,17 +31,17 @@ public class ZkpProofService {
             conn.setRequestProperty("Accept", "application/json");
             conn.setDoOutput(true);
 
-            // Set timeout — proof generation can take a few seconds
+            
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(60000);
 
-            // Send input JSON
+          
             try (OutputStream os = conn.getOutputStream()) {
                 byte[] bytes = inputJson.getBytes("utf-8");
                 os.write(bytes, 0, bytes.length);
             }
 
-            // Read response
+      
             int responseCode = conn.getResponseCode();
 
             BufferedReader reader;
@@ -102,10 +65,10 @@ public class ZkpProofService {
             String responseJson = responseBuilder.toString();
             System.out.println("[ZKP Server Response] " + responseJson);
 
-            // Parse response
+            
             Map<String, Object> response = mapper.readValue(responseJson, Map.class);
 
-            // Check success
+            
             if (responseCode != 200) {
                 throw new RuntimeException(
                     "ZKP server returned error " + responseCode + ": " + responseJson
@@ -123,7 +86,7 @@ public class ZkpProofService {
                 throw new RuntimeException("ZKP proof generated but verification failed");
             }
 
-            // Log metrics for benchmarking
+            
             Map<String, Object> metrics = (Map<String, Object>) response.get("metrics");
             if (metrics != null) {
                 System.out.println("[ZKP Metrics] " +
@@ -143,11 +106,7 @@ public class ZkpProofService {
         }
     }
 
-    // =============================
-    // VERIFY PROOF ONLY
-    // Used by BidService to verify a manually submitted proof
-    // Calls /verify-proof endpoint on Node.js server
-    // =============================
+    
     public boolean verifyProof(Map<String, Object> proof, java.util.List<Object> publicSignals) {
         try {
             Map<String, Object> requestBody = Map.of(
